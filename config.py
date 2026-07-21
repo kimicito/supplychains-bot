@@ -15,7 +15,38 @@ LOGISTORIA_URL = "https://logistoria.com"
 # === Исключённые регионы (для новостей) ===
 EXCLUDED_COUNTRIES = ["Украина", "Ukraine", "Польша", "Poland", "украина", "польша"]
 
+# === База статей supplychains.ru/blog ===
+# Ротация: 19 статей, не повторяем ~3 месяца
+# Чтение в день публикации (вт/чт в 11:00 МСК)
+
+ARTICLES_DATABASE = [
+    {"slug": "logistika-domashnih-hozyaistv", "url": "https://supplychains.ru/blog/logistika-domashnih-hozyaistv"},
+    {"slug": "logistika-obshestvennogo-pitaniya", "url": "https://supplychains.ru/blog/logistika-obshestvennogo-pitaniya"},
+    {"slug": "upravlenie-zapasami", "url": "https://supplychains.ru/blog/upravlenie-zapasami"},
+    {"slug": "logistika-tovarnogo-sklada", "url": "https://supplychains.ru/blog/logistika-tovarnogo-sklada"},
+    {"slug": "logistika-optovoy-torgovli", "url": "https://supplychains.ru/blog/logistika-optovoy-torgovli"},
+    {"slug": "logistika-transportnoy-kompanii", "url": "https://supplychains.ru/blog/logistika-transportnoy-kompanii"},
+    {"slug": "model-pyati-sil-portera", "url": "https://supplychains.ru/blog/model-pyati-sil-portera"},
+    {"slug": "supplychains-kak-vybirat-postavschikov", "url": "https://supplychains.ru/blog/supplychains-kak-vybirat-postavschikov"},
+    {"slug": "kak-otsenit-riski-postavschika", "url": "https://supplychains.ru/blog/kak-otsenit-riski-postavschika"},
+    {"slug": "tendernye-zakupki", "url": "https://supplychains.ru/blog/tendernye-zakupki"},
+    {"slug": "supply-chain-strategy", "url": "https://supplychains.ru/blog/supply-chain-strategy"},
+    {"slug": "5-prichin-pochemu-postavschik-mozhet-sorvat-sroki", "url": "https://supplychains.ru/blog/5-prichin-pochemu-postavschik-mozhet-sorvat-sroki"},
+    {"slug": "kak-vybrat-transportnuyu-kompaniyu", "url": "https://supplychains.ru/blog/kak-vybrat-transportnuyu-kompaniyu"},
+    {"slug": "sklog-otzyv", "url": "https://supplychains.ru/blog/sklog-otzyv"},
+    {"slug": "kak-oformit-gruz", "url": "https://supplychains.ru/blog/kak-oformit-gruz"},
+    {"slug": "chto-takoe-in-kot", "url": "https://supplychains.ru/blog/chto-takoe-in-kot"},
+    {"slug": "logistika-i-sklad", "url": "https://supplychains.ru/blog/logistika-i-sklad"},
+    {"slug": "strategiya-zakupok", "url": "https://supplychains.ru/blog/strategiya-zakupok"},
+    {"slug": "5-veschey-kotorye-nuzhno-znat", "url": "https://supplychains.ru/blog/5-veschey-kotorye-nuzhno-znat"},
+]
+
+# Количество дней до повторной публикации статьи
+ARTICLE_COOLDOWN_DAYS = 30
+
 # === Расписание публикаций (автономный режим) ===
+# Время: 11:00 МСК
+
 CONTENT_SCHEDULE = {
     "monday": {
         "type": "news",
@@ -32,8 +63,8 @@ CONTENT_SCHEDULE = {
             "inventory management simulation",
             "bullwhip effect game education"
         ],
-        "hashtags": "#логистика #геймификация #обучение #supplychain # seriousgames",
-        "time": "09:00",
+        "hashtags": "#логистика #геймификация #обучение #supplychain #seriousgames",
+        "time": "11:00",
         "cta": "🎮 Хотите попробовать игры в логистику? \n👉 https://logistoria.com/index-ru.html",
         "auto_generate": True
     },
@@ -41,10 +72,10 @@ CONTENT_SCHEDULE = {
         "type": "supplychains_digest",
         "title_emoji": "🚀",
         "title": "Logistics WOW",
-        "description": "Выжимка из статей supplychains.ru — статьи про закупки, логистику, цепочки поставок.",
+        "description": "Выжимка из статей supplychains.ru — читаем в день публикации.",
         "source": "supplychains.ru",
         "hashtags": "#логистика #закупки #цепочкипоставок #supplychains",
-        "time": "09:00",
+        "time": "11:00",
         "cta": "📚 Читать полностью: {article_url}",
         "auto_generate": True
     },
@@ -64,7 +95,7 @@ CONTENT_SCHEDULE = {
             "logistics_course"
         ],
         "hashtags": "#logistoria #симуляция #обучение #игрывлогистику",
-        "time": "09:00",
+        "time": "11:00",
         "cta": "🎮 Заказать игру: https://logistoria.com/{game_url}",
         "auto_generate": True
     },
@@ -72,10 +103,10 @@ CONTENT_SCHEDULE = {
         "type": "supplychains_digest",
         "title_emoji": "🚀",
         "title": "Logistics WOW",
-        "description": "Выжимка из статей supplychains.ru — новая статья.",
+        "description": "Выжимка из статей supplychains.ru — читаем в день публикации.",
         "source": "supplychains.ru",
         "hashtags": "#логистика #закупки #цепочкипоставок #supplychains",
-        "time": "09:00",
+        "time": "11:00",
         "cta": "📚 Читать полностью: {article_url}",
         "auto_generate": True
     },
@@ -96,7 +127,7 @@ CONTENT_SCHEDULE = {
             {"title": "Основатель", "type": "film", "teaser": "История Макдональдс: Just in Time и скорость реакции в QSR."}
         ],
         "hashtags": "#книги #логистика #бизнес #обучение #фильмы",
-        "time": "09:00",
+        "time": "11:00",
         "auto_generate": True
     },
     "saturday": {
@@ -113,7 +144,7 @@ CONTENT_SCHEDULE = {
         "title": "Итоги недели",
         "description": "Краткий дайджест: о чём писали на @supplychains на этой неделе.",
         "hashtags": "#итогинедели #лучшее #логистика #supplychains",
-        "time": "10:00",
+        "time": "11:00",
         "auto_generate": True
     }
 }

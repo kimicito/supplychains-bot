@@ -5,6 +5,7 @@ import json
 import asyncio
 import logging
 import random
+import re
 from datetime import datetime, timedelta, time as dt_time, timezone
 from pathlib import Path
 from dotenv import load_dotenv
@@ -14,7 +15,8 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 from config import (
     CONTENT_SCHEDULE, POST_TEMPLATES, CHANNEL_ID,
-    SUPPLYCHAINS_URL, LOGISTORIA_URL, AUTO_POST
+    SUPPLYCHAINS_URL, LOGISTORIA_URL, AUTO_POST,
+    ARTICLES_DATABASE, SUMMARY_LENGTH
 )
 
 load_dotenv()
@@ -49,6 +51,7 @@ def load_state():
         "last_posts": {},
         "game_index": 0,
         "book_index": 0,
+        "article_index": 0,
         "article_cache": []
     }
 
@@ -78,12 +81,12 @@ class AutonomousBot:
         self.app.add_handler(CommandHandler("schedule", self.cmd_schedule))
         self.app.add_handler(CommandHandler("stats", self.cmd_stats))
         
-        # Настройка ежедневного задания
+        # Настройка ежедневного задания — 11:00 МСК
         self.app.job_queue.run_daily(
             self._daily_post_job,
-            time=dt_time(hour=9, minute=0, tzinfo=timezone(timedelta(hours=3)))  # MSK
+            time=dt_time(hour=11, minute=0, tzinfo=timezone(timedelta(hours=3)))  # MSK
         )
-        logger.info("📅 Автопубликация настроена: 09:00 MSK")
+        logger.info("📅 Автопубликация настроена: 11:00 MSK")
         
     async def _daily_post_job(self, context: ContextTypes.DEFAULT_TYPE):
         """Ежедневная публикация по расписанию."""
@@ -136,12 +139,12 @@ class AutonomousBot:
             f"🤖 *SupplyChains Bot — Автономный режим*\n\n"
             f"Канал: {CHANNEL_ID}\n"
             f"Режим: {'Авто-публикация' if AUTO_POST else 'Согласование'}\n\n"
-            f"📅 *Расписание:*\n"
-            f"Пн — 🎮 Game Digest (новости из мира)\n"
-            f"Вт — 🚀 Logistics WOW (supplychains.ru)\n"
-            f"Ср — 📢 Попробуй игру (logistoria.com)\n"
-            f"Чт — 🚀 Logistics WOW (supplychains.ru)\n"
-            f"Пт — 📚 Полка логиста (книги/фильмы)\n"
+            f"📅 *Расписание (11:00 МСК):*\n"
+            f"Пн — 🎮 Game Digest\n"
+            f"Вт — 🚀 Logistics WOW (читаем статью)\n"
+            f"Ср — 📢 Попробуй игру\n"
+            f"Чт — 🚀 Logistics WOW (читаем статью)\n"
+            f"Пт — 📚 Полка логиста\n"
             f"Сб — 🤫 Тишина\n"
             f"Вс — 🔥 Итоги недели\n\n"
             f"Команды:\n"
@@ -187,7 +190,6 @@ class AutonomousBot:
         
         if AUTO_POST:
             await self._publish_to_channel(context.bot, post)
-            # Перемещаем в published
             published_path = PUBLISHED_DIR / f"{post_id}.json"
             post_path.rename(published_path)
             await update.message.reply_text("✅ Опубликовано в канал!")
@@ -198,7 +200,6 @@ class AutonomousBot:
         if not is_admin:
             return
             
-        # Находим последний пост
         posts = sorted(SCHEDULED_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
         if not posts:
             await update.message.reply_text("Нет готовых постов. Используй /generate")
@@ -209,14 +210,13 @@ class AutonomousBot:
             
         await self._publish_to_channel(context.bot, post)
         
-        # Перемещаем
         published_path = PUBLISHED_DIR / posts[0].name
         posts[0].rename(published_path)
         
         await update.message.reply_text("✅ Опубликовано!")
         
     async def cmd_schedule(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        text = "📅 *Расписание публикаций:*\n\n"
+        text = "📅 *Расписание публикаций (11:00 МСК):*\n\n"
         for day, cfg in CONTENT_SCHEDULE.items():
             if cfg.get('auto_generate', False):
                 text += f"{cfg['title_emoji']} *{day.capitalize()}* — {cfg['title']}\n"
@@ -228,7 +228,6 @@ class AutonomousBot:
         published = list(PUBLISHED_DIR.glob("*.json"))
         scheduled = list(SCHEDULED_DIR.glob("*.json"))
         
-        # Считаем по типам
         types = {}
         for p in published:
             with open(p, 'r') as f:
@@ -267,8 +266,6 @@ class AutonomousBot:
         queries = schedule.get('search_queries', [])
         query = random.choice(queries) if queries else "serious games logistics"
         
-        # Здесь будет интеграция с kimi_search
-        # Пока — шаблон с ротацией контента
         topics = [
             {
                 "title": "Как геймификация меняет корпоративное обучение",
@@ -306,61 +303,112 @@ class AutonomousBot:
         }
         
     async def _generate_supplychains_post(self, schedule: dict) -> dict:
-        """Генерация выжимки из supplychains.ru."""
-        # Список известных статей/тем с сайта
-        articles = [
-            {
-                "title": "Игры в логистику: почему это работает",
-                "summary": "Игровые симуляции позволяют участникам прожить бизнес-ситуацию, понять взаимосвязи в цепи поставок и увидеть последствия своих решений. В отличие от лекций, игра формирует мышление через опыт.",
-                "url": f"{SUPPLYCHAINS_URL}/games"
-            },
-            {
-                "title": "Как обучить закупщика принимать решения под давлением",
-                "summary": "Современный закупщик работает в условиях неопределённости: скачки курсов, перебои в поставках, изменение спроса. Симуляции помогают отработать сценарии до реальной ситуации.",
-                "url": f"{SUPPLYCHAINS_URL}/procurement"
-            },
-            {
-                "title": "Цифровизация цепочек поставок: от теории к практике",
-                "summary": "ИИ, IoT, блокчейн — технологии меняют логистику. Но главное не технология, а понимание процессов. Игры помогают увидеть, где цифровизация даст эффект, а где — нет.",
-                "url": f"{SUPPLYCHAINS_URL}/digital"
-            },
-            {
-                "title": "S&OP: как согласовать продажи, производство и закупки",
-                "summary": "Sales & Operations Planning — процесс, который ломается на стыке отделов. Симуляция показывает, почему 'оптимальное' решение одного отдела вредит компании в целом.",
-                "url": f"{SUPPLYCHAINS_URL}/sop"
-            },
-            {
-                "title": "Прогнозирование спроса: от интуиции к алгоритмам",
-                "summary": "50% ошибок в запасах — это ошибки прогноза. Игры в логистику показывают, почему даже точный прогноз не спасает без гибкости цепи поставок.",
-                "url": f"{SUPPLYCHAINS_URL}/forecasting"
-            }
-        ]
+        """Генерация выжимки из supplychains.ru — читаем статью в день публикации."""
+        # Получаем следующую статью из ротации
+        idx = self.state.get('article_index', 0) % len(ARTICLES_DATABASE)
+        article = ARTICLES_DATABASE[idx]
         
-        # Выбираем статью, которой ещё не было
-        used = self.state.get('last_posts', {}).get('supplychains', [])
-        available = [a for a in articles if a['title'] not in used]
-        if not available:
-            available = articles  # Все использованы — начинаем сначала
-            used = []
-            
-        article = random.choice(available)
-        used.append(article['title'])
-        self.state['last_posts']['supplychains'] = used[-10:]  # Храним последние 10
+        logger.info(f"📖 Читаем статью: {article['url']}")
+        
+        # Читаем статью в реальном времени
+        try:
+            title, summary = await self._fetch_article_content(article['url'])
+            logger.info(f"✅ Статья прочитана: {title}")
+        except Exception as e:
+            logger.error(f"❌ Ошибка чтения статьи: {e}")
+            # Fallback — используем slug как заголовок
+            title = article['slug'].replace('-', ' ').title()
+            summary = "Читайте полную версию статьи на сайте."
+        
+        # Обновляем индекс
+        self.state['article_index'] = idx + 1
         save_state(self.state)
+        
+        # Формируем CTA
+        cta = schedule.get('cta', '').format(article_url=article['url'])
+        
+        # Обрезаем summary
+        if len(summary) > SUMMARY_LENGTH:
+            summary = summary[:SUMMARY_LENGTH].rsplit(' ', 1)[0] + "..."
         
         return {
             "type": "supplychains_digest",
             "title": f"{schedule['title_emoji']} {schedule['title']}",
             "text": (
-                f"{schedule['title_emoji']} *{article['title']}*\n\n"
-                f"{article['summary'][:600]}...\n\n"
-                f"📚 Читать полностью: {article['url']}\n\n"
+                f"{schedule['title_emoji']} *{title}*\n\n"
+                f"{summary}\n\n"
+                f"{cta}\n\n"
                 f"{schedule['hashtags']}"
             ),
             "topic": "supplychains_digest",
             "article_url": article['url'],
+            "article_slug": article['slug'],
             "created_at": datetime.now().isoformat()
         }
+        
+    async def _fetch_article_content(self, url: str) -> tuple:
+        """Прочитать статью с supplychains.ru через aiohttp."""
+        import aiohttp
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'ru-RU,ru;q=0.9,en;q=0.8',
+        }
+        
+        async with aiohttp.ClientSession(headers=headers) as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                if resp.status != 200:
+                    raise Exception(f"HTTP {resp.status}")
+                
+                html = await resp.text()
+                
+                # Парсим заголовок (H1)
+                title_match = re.search(r'<h1[^>]*>(.*?)</h1>', html, re.DOTALL | re.IGNORECASE)
+                title = title_match.group(1).strip() if title_match else "Статья"
+                # Убираем HTML-теги из заголовка
+                title = re.sub(r'<[^>]+>', '', title)
+                
+                # Парсим основной текст
+                # Ищем блоки с текстом статьи (типичная структура Tilda)
+                text_blocks = []
+                
+                # Пробуем найти основной контент через разные селекторы
+                # Вариант 1: t-feed__post-wrapper
+                content_match = re.search(r'class="t-feed__post-wrapper[^"]*"[^>]*>(.*?)</div>\s*</div>\s*</div>\s*</div>', html, re.DOTALL)
+                if content_match:
+                    text = content_match.group(1)
+                else:
+                    # Вариант 2: любой большой блок текста
+                    text = html
+                
+                # Извлекаем текст из параграфов
+                paragraphs = re.findall(r'<p[^>]*>(.*?)</p>', text, re.DOTALL)
+                
+                for p in paragraphs:
+                    # Убираем HTML-теги
+                    clean = re.sub(r'<[^>]+>', '', p)
+                    # Убираем лишние пробелы
+                    clean = ' '.join(clean.split())
+                    # Пропускаем короткие и служебные
+                    if len(clean) > 30 and not any(skip in clean.lower() for skip in ['cookie', 'подписаться', 'рекомендуем', 'читайте также']):
+                        text_blocks.append(clean)
+                
+                # Собираем summary из первых 3-5 абзацев
+                summary = ' '.join(text_blocks[:5])
+                
+                # Если не получилось — берём любой текст
+                if not summary:
+                    # Убираем все теги и берём первые 500 символов
+                    plain = re.sub(r'<[^>]+>', ' ', html)
+                    plain = ' '.join(plain.split())
+                    # Ищем начало осмысленного текста
+                    words = plain.split()
+                    # Пропускаем первые ~50 слов (обычно меню/шапка)
+                    start = min(50, len(words)//4)
+                    summary = ' '.join(words[start:start+150])
+                
+                return title, summary
         
     async def _generate_promo_post(self, schedule: dict) -> dict:
         """Анонс игры logistoria.com."""
@@ -368,7 +416,6 @@ class AutonomousBot:
         if not games:
             games = ['kadena']
             
-        # Берём следующую игру по очереди
         idx = self.state.get('game_index', 0) % len(games)
         game = games[idx]
         self.state['game_index'] = idx + 1
@@ -457,7 +504,6 @@ class AutonomousBot:
         if not books:
             books = [{"title": "Цель", "author": "Голдратт", "type": "business", "teaser": "Теория ограничений"}]
             
-        # Берём следующую книгу по очереди
         idx = self.state.get('book_index', 0) % len(books)
         book = books[idx]
         self.state['book_index'] = idx + 1
@@ -487,7 +533,6 @@ class AutonomousBot:
         
     async def _generate_digest_post(self, schedule: dict) -> dict:
         """Итоги недели."""
-        # Получаем последние опубликованные посты
         published = sorted(PUBLISHED_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:5]
         
         topics = []
@@ -543,6 +588,8 @@ class AutonomousBot:
         logger.info(f"📢 Канал: {CHANNEL_ID}")
         logger.info(f"👤 Админ: {ADMIN_CHAT_ID}")
         logger.info(f"⚙️ Авто-публикация: {AUTO_POST}")
+        logger.info(f"📅 Время: 11:00 MSK")
+        logger.info(f"📖 Статей в ротации: {len(ARTICLES_DATABASE)}")
         self.app.run_polling()
 
 
